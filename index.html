@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E2236">
+<title>DERIC</title>
+<style>
+:root{--ink:#0E2236;--ink2:#17334f;--paper:#F1F5F8;--blue:#2F6BFF;--mint:#4FD8A8;--warn:#FFB84D;--text:#F1F5F8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--ink);color:var(--text);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+.logo{font-size:22px;font-weight:800;letter-spacing:.14em}
+.seg{display:flex;background:var(--ink2);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;color:var(--text);padding:7px 16px;border-radius:999px;font-weight:700;font-size:14px}
+.seg button.on{background:var(--blue)}
+#stage{position:relative;flex:1;min-height:0;background:#000;margin:0 10px;border-radius:20px;overflow:hidden}
+video{width:100%;height:100%;object-fit:cover;display:block}
+#scan{position:absolute;left:0;right:0;height:3px;background:var(--mint);box-shadow:0 0 14px var(--mint);top:0;opacity:0}
+#stage.busy #scan{opacity:1;animation:sw 1.4s linear infinite}
+@keyframes sw{from{top:0}to{top:100%}}
+@media(prefers-reduced-motion:reduce){#stage.busy #scan{animation:none;top:50%}}
+#gate{position:absolute;inset:0;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+#gate h1{font-size:34px;letter-spacing:.14em}
+#gate p{max-width:30ch;line-height:1.5;color:#b8c8d8}
+.btn{border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:700;font-size:16px;padding:14px 22px}
+.btn:focus-visible,.seg button:focus-visible,.chip:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.hidden{display:none!important}
+#panel{padding:14px 16px 10px;text-align:center}
+#word{font-size:clamp(34px,11vw,56px);font-weight:800;line-height:1.1;min-height:1.1em;word-break:break-word}
+#meta{margin-top:6px;color:#b8c8d8;font-size:14px;min-height:1.3em}
+#meta b{color:var(--mint)}
+#meta.slow b{color:var(--warn)}
+#bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:6px 10px 12px}
+.chip{border:1px solid #2c4a68;background:var(--ink2);color:var(--text);border-radius:999px;padding:10px 14px;font-size:14px;font-weight:600}
+.chip.ok{border-color:var(--mint);color:var(--mint)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">DERIC</div>
+  <div class="seg" role="group" aria-label="Language">
+    <button id="l-en" class="on">EN</button><button id="l-rw">RW</button>
+  </div>
+</header>
+
+<div id="stage">
+  <video id="v" playsinline muted autoplay></video>
+  <div id="scan"></div>
+  <div id="gate">
+    <h1>DERIC</h1>
+    <p id="g-text">Turn on the camera. DERIC will look, name what it sees, and say it out loud. No tapping to take photos.</p>
+    <button class="btn" id="go">Allow camera</button>
+    <p id="g-err" class="hidden" style="color:var(--warn)"></p>
+  </div>
+</div>
+
+<div id="panel" aria-live="polite">
+  <div id="word">—</div>
+  <div id="meta"></div>
+</div>
+
+<div id="bar">
+  <button class="chip" id="bt">Connect Bluetooth</button>
+  <button class="chip" id="flip">Switch camera</button>
+  <button class="chip" id="pause">Pause</button>
+  <button class="chip" id="test">Test sound</button>
+</div>
+
+<canvas id="cv" class="hidden"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const LIMIT = 5000;          // max processing time per photo (ms)
+const EVERY = 1200;          // gap between automatic captures (ms)
+const REPEAT = 7000;         // repeat the same name after this long (ms)
+
+const RW = {person:"umuntu",bicycle:"igare",car:"imodoka",motorcycle:"moto",airplane:"indege",bus:"bisi",train:"gari ya moshi",truck:"ikamyo",boat:"ubwato","traffic light":"itara ryo mu muhanda","fire hydrant":"robine y'umuriro","stop sign":"ikimenyetso cyo guhagarara",bench:"intebe ndende",bird:"inyoni",cat:"injangwe",dog:"imbwa",horse:"ifarashi",sheep:"intama",cow:"inka",elephant:"inzovu",bear:"idubu",zebra:"pundamilia",giraffe:"twiga",backpack:"igikapu cyo mu mugongo",umbrella:"umutaka",handbag:"agakapu",tie:"karuvati",suitcase:"isanduku y'urugendo",frisbee:"disiki yo gukina",skis:"ski","sports ball":"umupira",kite:"igikinisho kiguruka","baseball bat":"inkoni yo gukina","tennis racket":"raketi ya tenisi",bottle:"icupa","wine glass":"ikirahuri cya divayi",cup:"igikombe",fork:"ifuruseti",knife:"icyuma",spoon:"ikiyiko",bowl:"isahani ndende",banana:"igitoki",apple:"pome",sandwich:"sandwich",orange:"icunga",broccoli:"broccoli",carrot:"karoti","hot dog":"hot dog",pizza:"pizza",donut:"donati",cake:"keke",chair:"intebe",couch:"sofa","potted plant":"igihingwa mu kibindi",bed:"igitanda","dining table":"ameza",toilet:"ubwiherero",tv:"televiziyo",laptop:"mudasobwa igendanwa",mouse:"imbeba ya mudasobwa",remote:"telekomande",keyboard:"kibodi","cell phone":"telefoni",microwave:"mikorowe",oven:"ifuru",toaster:"toster",sink:"igikoresho cyo gukarabiramo",refrigerator:"firigo",book:"igitabo",clock:"isaha",vase:"ikibindi",scissors:"imikasi","teddy bear":"idubu y'igikinisho","hair drier":"icyuma cyumisha umusatsi",toothbrush:"uburoso bw'amenyo"};
+
+const UI = {
+  en:{gate:"Turn on the camera. DERIC will look, name what it sees, and say it out loud. No tapping to take photos.",go:"Allow camera",denied:"Camera access was not allowed. Tap Allow camera to ask again. If no prompt appears, tap the lock icon in the address bar and set Camera to Allow. DERIC starts by itself, no reload needed.",nosec:"Camera needs a secure page. Open this file from an https:// address (for example, host it on Vercel).",load:"Loading…",look:"Looking…",none:"Point the camera at an object",bt:"Connect Bluetooth",btOn:"Bluetooth: ",flip:"Switch camera",pause:"Pause",resume:"Resume",test:"Test sound",slow:"Took too long, trying again",say:n=>n,sec:"s",unsup:"Bluetooth pairing is not supported in this browser. Pair your speaker in the phone's Bluetooth settings; DERIC's sound will play through it."},
+  rw:{gate:"Fungura kamera. DERIC irareba, ikavuga icyo ibonye, ikakivuga mu ijwi. Nta gukanda ufata ifoto.",go:"Emerera kamera",denied:"Kamera ntiyemerewe. Kanda Emerera kamera wongere ubaze. Niba nta kibazo kigaragara, kanda ikimenyetso cy'ingufuri mu gice cy'aderesi, ushyire Kamera kuri Emerera. DERIC irikorera, nta gusubiramo.",nosec:"Kamera ikenera urubuga rwizewe. Fungura iyi dosiye kuri https:// (urugero, uyishyire kuri Vercel).",load:"Birimo gutegurwa…",look:"Irareba…",none:"Garagaza kamera ku kintu",bt:"Huza Bluetooth",btOn:"Bluetooth: ",flip:"Hindura kamera",pause:"Hagarika",resume:"Komeza",test:"Gerageza ijwi",slow:"Byatinze, turongera",say:n=>"Ni "+n,sec:"s",unsup:"Gufatanya na Bluetooth ntibishoboka kuri iyi porogaramu. Huza indangururamajwi mu migenzereze ya telefoni; ijwi rya DERIC rizayinyuramo."}
+};
+
+let lang = "en", stream = null, facing = "environment", running = false, busy = false, paused = false;
+let models = {}, lastName = "", lastAt = 0, btName = "";
+
+function applyLang(){
+  const t = UI[lang];
+  document.documentElement.lang = lang === "rw" ? "rw" : "en";
+  $("l-en").classList.toggle("on", lang === "en");
+  $("l-rw").classList.toggle("on", lang === "rw");
+  $("g-text").textContent = t.gate; $("go").textContent = t.go;
+  $("flip").textContent = t.flip; $("test").textContent = t.test;
+  $("pause").textContent = paused ? t.resume : t.pause;
+  $("bt").textContent = btName ? t.btOn + btName : t.bt;
+  if (!running) return;
+  $("meta").textContent = "";
+}
+$("l-en").onclick = () => { lang = "en"; applyLang(); lastName = ""; };
+$("l-rw").onclick = () => { lang = "rw"; applyLang(); lastName = ""; };
+
+/* ---------- speech ---------- */
+function speak(text, l){
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const vs = speechSynthesis.getVoices();
+  const find = c => vs.find(v => v.lang.toLowerCase().replace("_","-").startsWith(c));
+  const v = l === "rw" ? (find("rw") || find("sw")) : find("en");
+  if (v){ u.voice = v; u.lang = v.lang; } else u.lang = l === "rw" ? "rw-RW" : "en-US";
+  u.rate = .95;
+  speechSynthesis.speak(u);
+}
+speechSynthesis && (speechSynthesis.onvoiceschanged = () => {});
+
+/* ---------- camera ---------- */
+async function startCamera(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:640}},audio:false});
+  $("v").srcObject = stream;
+  stream.getVideoTracks()[0].onended = () => { if (running) setTimeout(() => startCamera().catch(() => {}), 500); };
+  await $("v").play();
+}
+let starting = false;
+async function begin(){
+  if (starting || running) return; starting = true;
+  const err = $("g-err"); err.classList.add("hidden");
+  if (!navigator.mediaDevices || !window.isSecureContext){ err.textContent = UI[lang].nosec; err.classList.remove("hidden"); starting = false; return; }
+  try { await startCamera(); }
+  catch(e){ err.textContent = UI[lang].denied; err.classList.remove("hidden"); starting = false; return; }
+  $("gate").classList.add("hidden");
+  $("word").textContent = UI[lang].load;
+  try {
+    const [coco, mob] = await Promise.all([cocoSsd.load({base:"lite_mobilenet_v2"}), mobilenet.load({version:2, alpha:0.5})]);
+    models = {coco, mob};
+  } catch(e){ $("word").textContent = "Model error"; $("meta").textContent = String(e.message || e); starting = false; return; }
+  $("word").textContent = "—"; $("meta").textContent = UI[lang].none;
+  running = true; starting = false; tick();
+}
+$("go").onclick = begin;
+
+/* keep the camera alive and ask for access inside the app */
+document.addEventListener("pointerdown", () => { if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }, {once:true});
+if (navigator.permissions && navigator.permissions.query){
+  navigator.permissions.query({name:"camera"}).then(p => {
+    p.onchange = () => { if (p.state === "granted") begin(); };   // starts by itself once allowed, no reload
+  }).catch(() => {});
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && running && (!stream || stream.getVideoTracks().every(t => t.readyState === "ended"))) startCamera().catch(() => {});
+});
+window.addEventListener("load", begin);   // ask for the camera as soon as the app opens
+$("flip").onclick = async () => { facing = facing === "environment" ? "user" : "environment"; try{ await startCamera(); }catch(e){} };
+$("pause").onclick = () => { paused = !paused; applyLang(); };
+
+/* ---------- auto capture + recognition ---------- */
+async function analyse(){
+  const v = $("v"), c = $("cv"), w = 320;
+  c.width = w; c.height = Math.round(w * v.videoHeight / v.videoWidth) || 240;
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  const d = await models.coco.detect(c, 3, 0.5);
+  if (d.length) return {name:d[0].class, score:d[0].score};
+  const m = await models.mob.classify(c, 1);
+  if (m.length && m[0].probability >= 0.3) return {name:m[0].className.split(",")[0].trim().toLowerCase(), score:m[0].probability};
+  return null;
+}
+async function tick(){
+  if (!running) return;
+  if (!busy && !paused && $("v").videoWidth && !speechSynthesis.speaking){
+    busy = true; $("stage").classList.add("busy");
+    const t0 = performance.now(); $("meta").className = "";
+    try {
+      const r = await Promise.race([analyse(), new Promise((_, j) => setTimeout(() => j("timeout"), LIMIT))]);
+      const s = ((performance.now() - t0) / 1000).toFixed(1);
+      if (r){
+        const t = UI[lang], shown = lang === "rw" ? (RW[r.name] || r.name) : r.name;
+        $("word").textContent = shown;
+        $("meta").innerHTML = Math.round(r.score * 100) + "% · <b>" + s + t.sec + "</b>";
+        const now = Date.now();
+        if (r.name !== lastName || now - lastAt > REPEAT){ lastName = r.name; lastAt = now; speak(t.say(shown), lang); }
+      } else { $("word").textContent = "—"; $("meta").innerHTML = UI[lang].none + " · <b>" + s + UI[lang].sec + "</b>"; lastName = ""; }
+    } catch(e){
+      $("meta").className = "slow"; $("meta").innerHTML = "<b>" + UI[lang].slow + "</b>";
+    }
+    busy = false; $("stage").classList.remove("busy");
+  }
+  setTimeout(tick, EVERY);
+}
+
+/* ---------- bluetooth ---------- */
+$("bt").onclick = async () => {
+  if (!navigator.bluetooth){ $("meta").textContent = UI[lang].unsup; return; }
+  try {
+    const d = await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+    btName = d.name || "device"; $("bt").classList.add("ok"); applyLang();
+    d.addEventListener("gattserverdisconnected", () => { btName = ""; $("bt").classList.remove("ok"); applyLang(); });
+    try { await d.gatt.connect(); } catch(e){}
+    speak(lang === "rw" ? "Bluetooth yahujwe" : "Bluetooth connected", lang);
+  } catch(e){ /* cancelled */ }
+};
+$("test").onclick = () => speak(lang === "rw" ? "Ni DERIC" : "This is DERIC", lang);
+
+applyLang();
+</script>
+</body>
+</html>
