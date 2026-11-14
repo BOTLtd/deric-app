@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E2236">
+<title>DERIC</title>
+<style>
+:root{--ink:#0E2236;--ink2:#17334f;--paper:#F1F5F8;--blue:#2F6BFF;--mint:#4FD8A8;--warn:#FFB84D;--text:#F1F5F8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--ink);color:var(--text);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+.logo{font-size:22px;font-weight:800;letter-spacing:.14em}
+.seg{display:flex;background:var(--ink2);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;color:var(--text);padding:7px 16px;border-radius:999px;font-weight:700;font-size:14px}
+.seg button.on{background:var(--blue)}
+#stage{position:relative;flex:1;min-height:0;background:#000;margin:0 10px;border-radius:20px;overflow:hidden}
+video{width:100%;height:100%;object-fit:cover;display:block}
+#scan{position:absolute;left:0;right:0;height:3px;background:var(--mint);box-shadow:0 0 14px var(--mint);top:0;opacity:0}
+#stage.busy #scan{opacity:1;animation:sw 1.4s linear infinite}
+@keyframes sw{from{top:0}to{top:100%}}
+@media(prefers-reduced-motion:reduce){#stage.busy #scan{animation:none;top:50%}}
+#gate{position:absolute;inset:0;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+#gate h1{font-size:34px;letter-spacing:.14em}
+#gate p{max-width:30ch;line-height:1.5;color:#b8c8d8}
+.btn{border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:700;font-size:16px;padding:14px 22px}
+.btn:focus-visible,.seg button:focus-visible,.chip:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.hidden{display:none!important}
+#panel{padding:14px 16px 10px;text-align:center}
+#word{font-size:clamp(34px,11vw,56px);font-weight:800;line-height:1.1;min-height:1.1em;word-break:break-word}
+#meta{margin-top:6px;color:#b8c8d8;font-size:14px;min-height:1.3em}
+#meta b{color:var(--mint)}
+#meta.slow b{color:var(--warn)}
+#bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:6px 10px 12px}
+.chip{border:1px solid #2c4a68;background:var(--ink2);color:var(--text);border-radius:999px;padding:10px 14px;font-size:14px;font-weight:600}
+.chip.ok{border-color:var(--mint);color:var(--mint)}
+#panel{max-height:34vh;overflow:auto}
+#word.small{font-size:20px;font-weight:600;line-height:1.35;text-align:left}
+#txt{margin-top:8px;font-size:18px;line-height:1.35;text-align:left;color:#d9e6f2}
+#env{margin-top:4px;color:#8ea5bb;font-size:12px;min-height:1.2em}
+.ov{position:fixed;inset:0;background:rgba(5,12,20,.82);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{width:100%;max-width:480px;background:var(--ink2);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;max-height:92%;overflow:auto}
+.sheet h2{font-size:18px}
+.sheet label{display:flex;flex-direction:column;gap:8px;font-size:14px;color:#b8c8d8}
+.sheet label.chk{flex-direction:row;align-items:center;gap:10px;font-size:15px}
+.sheet label.chk input{width:22px;height:22px}
+.sheet textarea{background:var(--ink);color:var(--text);border:1px solid #2c4a68;border-radius:10px;padding:12px;font-size:16px;font-family:inherit;width:100%;resize:vertical}
+.sheet input[type=range]{width:100%;accent-color:var(--blue)}
+.sheet .top{display:flex;justify-content:space-between}
+.note{font-size:13px;color:#b8c8d8;line-height:1.45}
+.row{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">DERIC</div>
+  <div class="seg" role="group" aria-label="Language">
+    <button id="l-en" class="on">EN</button><button id="l-rw">RW</button>
+  </div>
+</header>
+
+<div id="stage">
+  <video id="v" playsinline muted autoplay></video>
+  <div id="scan"></div>
+  <div id="gate">
+    <h1>DERIC</h1>
+    <p id="g-text">Turn on the camera. DERIC will look, name what it sees, and say it out loud. No tapping to take photos.</p>
+    <button class="btn" id="go">Allow camera</button>
+    <div style="font-size:12px;color:#6f89a3">DERIC v3</div>
+    <p id="g-err" class="hidden" style="color:var(--warn)"></p>
+    <div id="g-app" class="hidden" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <button class="btn" id="g-chrome">Open in Chrome</button>
+      <button class="chip" id="g-copy">Copy link</button>
+    </div>
+  </div>
+</div>
+
+<div id="panel" aria-live="polite">
+  <div id="word">—</div>
+  <div id="txt"></div>
+  <div id="meta"></div>
+  <div id="env"></div>
+</div>
+
+<div id="bar">
+  <button class="chip" id="bt">Connect Bluetooth</button>
+  <button class="chip" id="flip">Switch camera</button>
+  <button class="chip" id="pause">Pause</button>
+  <button class="chip" id="test">Test sound</button>
+  <button class="chip hidden" id="torch">Light</button>
+  <button class="chip" id="setb">Settings</button>
+  <button class="chip" id="fbb">Feedback</button>
+</div>
+
+<div id="set" class="ov hidden" role="dialog" aria-modal="true"><div class="sheet">
+  <h2 id="s-t">Settings</h2>
+  <label><span class="top"><span id="s-sp">Time between photos</span><b id="s-v">1.2 s</b></span><input id="s-r" type="range" min="0.3" max="3" step="0.1" value="1.2"></label>
+  <label class="chk"><input id="s-a" type="checkbox" checked><span id="s-au">Auto camera settings</span></label>
+  <div class="row"><button class="btn" id="s-done">Done</button></div>
+</div></div>
+
+<div id="fb" class="ov hidden" role="dialog" aria-modal="true"><div class="sheet">
+  <h2 id="f-t">Send feedback</h2>
+  <textarea id="f-m" rows="5"></textarea>
+  <p class="note" id="f-n"></p>
+  <div class="row"><button class="chip" id="f-cancel">Cancel</button><button class="chip" id="f-copy">Copy email</button><button class="btn" id="f-send">Send email</button></div>
+</div></div>
+
+<canvas id="cv" class="hidden"></canvas>
+
+<script>
+const $ = id => document.getElementById(id);
+const loadScript = src => new Promise((res, rej) => {
+  const e = document.createElement("script"); e.src = src; e.onload = res;
+  e.onerror = () => rej(new Error("Could not load " + src.split("/").pop())); document.head.appendChild(e);
+});
+let tfP = null, ocrLibP = null;
+const getTF = () => tfP || (tfP = loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js").then(() => Promise.all([
+  loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"),
+  loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js")])).catch(e => { tfP = null; throw e; }));
+const getOcrLib = () => ocrLibP || (ocrLibP = loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js").catch(e => { ocrLibP = null; throw e; }));
+getTF().catch(() => {}); getOcrLib().catch(() => {});
+// remove any old offline cache from earlier versions so the newest file always loads
+try {
+  if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistrations().then(r => r.forEach(x => x.unregister())).catch(() => {});
+  if (window.caches) caches.keys().then(k => k.filter(x => x.indexOf("deric-") === 0).forEach(x => caches.delete(x))).catch(() => {});
+} catch(e){}
+const LIMIT = 5000;          // max processing time per photo (ms)
+
+const RW = {person:"umuntu",bicycle:"igare",car:"imodoka",motorcycle:"moto",airplane:"indege",bus:"bisi",train:"gari ya moshi",truck:"ikamyo",boat:"ubwato","traffic light":"itara ryo mu muhanda","fire hydrant":"robine y'umuriro","stop sign":"ikimenyetso cyo guhagarara",bench:"intebe ndende",bird:"inyoni",cat:"injangwe",dog:"imbwa",horse:"ifarashi",sheep:"intama",cow:"inka",elephant:"inzovu",bear:"idubu",zebra:"pundamilia",giraffe:"twiga",backpack:"igikapu cyo mu mugongo",umbrella:"umutaka",handbag:"agakapu",tie:"karuvati",suitcase:"isanduku y'urugendo",frisbee:"disiki yo gukina",skis:"ski","sports ball":"umupira",kite:"igikinisho kiguruka","baseball bat":"inkoni yo gukina","tennis racket":"raketi ya tenisi",bottle:"icupa","wine glass":"ikirahuri cya divayi",cup:"igikombe",fork:"ifuruseti",knife:"icyuma",spoon:"ikiyiko",bowl:"isahani ndende",banana:"igitoki",apple:"pome",sandwich:"sandwich",orange:"icunga",broccoli:"broccoli",carrot:"karoti","hot dog":"hot dog",pizza:"pizza",donut:"donati",cake:"keke",chair:"intebe",couch:"sofa","potted plant":"igihingwa mu kibindi",bed:"igitanda","dining table":"ameza",toilet:"ubwiherero",tv:"televiziyo",laptop:"mudasobwa igendanwa",mouse:"imbeba ya mudasobwa",remote:"telekomande",keyboard:"kibodi","cell phone":"telefoni",microwave:"mikorowe",oven:"ifuru",toaster:"toster",sink:"igikoresho cyo gukarabiramo",refrigerator:"firigo",book:"igitabo",clock:"isaha",vase:"ikibindi",scissors:"imikasi","teddy bear":"idubu y'igikinisho","hair drier":"icyuma cyumisha umusatsi",toothbrush:"uburoso bw'amenyo"};
+
+const UI = {
+  en:{gate:"Turn on the camera. DERIC will look, name what it sees, and say it out loud. No tapping to take photos.",go:"Allow camera",denied:"Camera access was not allowed. Tap Allow camera to ask again. If no prompt appears, tap the lock icon in the address bar and set Camera to Allow. DERIC starts by itself, no reload needed.",nosec:"Camera needs a secure page. Open this file from an https:// address (for example, host it on Vercel).",load:"Loading…",look:"Looking…",none:"Point the camera at an object or writing",bt:"Connect Bluetooth",btOn:"Bluetooth: ",flip:"Switch camera",pause:"Pause",resume:"Resume",test:"Test sound",slow:"Took too long, trying again",say:n=>n,sec:"s",notSure:"I am not sure",reads:"It reads: ",set:"Settings",speed:"Time between photos",autoCam:"Auto camera settings",done:"Done",fb:"Feedback",fbT:"Send feedback",fbPh:"Write your feedback here",fbN:"This opens your email app with your message to support.kglai@gmail.com. Your browser name is added to help us fix problems. If nothing opens, tap Copy email.",send:"Send email",copyMail:"Copy email",cancel:"Cancel",noText:"No text found",loadTxt:"Getting text reader ready…",torchBtn:"Light",lDark:"Dark",lOk:"Good light",lBright:"Very bright",lTorch:"light on",mailCopied:"Email address copied.",inapp:"Facebook and other in-app browsers block the camera. Tap the \u22ee or \u00b7\u00b7\u00b7 menu, then choose Open in browser (Chrome or Safari).",chrome:"Open in Chrome",copy:"Copy link",copied:"Link copied. Paste it in Chrome or Safari.",wait:"Waiting for camera permission. Tap Allow when your phone asks.",nocam:"No camera was found on this device.",busyCam:"The camera could not start. Close other apps that use the camera, then tap Allow camera.",modelErr:"Could not load the recognition models. Check your internet. Trying again…",unsup:"Bluetooth pairing is not supported in this browser. Pair your speaker in the phone's Bluetooth settings; DERIC's sound will play through it."},
+  rw:{gate:"Fungura kamera. DERIC irareba, ikavuga icyo ibonye, ikakivuga mu ijwi. Nta gukanda ufata ifoto.",go:"Emerera kamera",denied:"Kamera ntiyemerewe. Kanda Emerera kamera wongere ubaze. Niba nta kibazo kigaragara, kanda ikimenyetso cy'ingufuri mu gice cy'aderesi, ushyire Kamera kuri Emerera. DERIC irikorera, nta gusubiramo.",nosec:"Kamera ikenera urubuga rwizewe. Fungura iyi dosiye kuri https:// (urugero, uyishyire kuri Vercel).",load:"Birimo gutegurwa…",look:"Irareba…",none:"Garagaza kamera ku kintu cyangwa inyandiko",bt:"Huza Bluetooth",btOn:"Bluetooth: ",flip:"Hindura kamera",pause:"Hagarika",resume:"Komeza",test:"Gerageza ijwi",slow:"Byatinze, turongera",say:n=>"Ni "+n,sec:"s",notSure:"Ntabwo mbyizeye",reads:"Handitse: ",set:"Igenamiterere",speed:"Igihe hagati y'amafoto",autoCam:"Kamera yihindura ukurikije ahantu",done:"Birakwiye",fb:"Ibitekerezo",fbT:"Ohereza igitekerezo",fbPh:"Andika igitekerezo cyawe hano",fbN:"Ibi bifungura imeri yawe ngo wohereze ubutumwa kuri support.kglai@gmail.com. Izina rya browser ryongerwaho kudufasha gukosora ibibazo. Nta kintu gifunguye, kanda Kopora imeri.",send:"Ohereza imeri",copyMail:"Kopora imeri",cancel:"Reka",noText:"Nta nyandiko yabonetse",loadTxt:"Dutegura gusoma inyandiko…",torchBtn:"Urumuri",lDark:"Umwijima",lOk:"Urumuri rukwiye",lBright:"Urumuri rwinshi",lTorch:"urumuri rurakinguye",mailCopied:"Imeri yakopowe.",inapp:"Facebook n\'izindi porogaramu zifunga kamera. Kanda \u22ee cyangwa \u00b7\u00b7\u00b7 ubundi uhitemo Fungurira muri browser (Chrome cyangwa Safari).",chrome:"Fungurira muri Chrome",copy:"Kopora link",copied:"Link yakopowe. Yishyire muri Chrome cyangwa Safari.",wait:"Dutegereje uruhushya rwa kamera. Kanda Emerera telefoni nibikubaza.",nocam:"Nta kamera yabonetse kuri iki gikoresho.",busyCam:"Kamera ntiyashoboye gutangira. Funga izindi porogaramu zikoresha kamera, ukande Emerera kamera.",modelErr:"Ntibishobotse gutegura ibikoresho byo kumenya. Reba interineti. Turongera kugerageza…",unsup:"Gufatanya na Bluetooth ntibishoboka kuri iyi porogaramu. Huza indangururamajwi mu migenzereze ya telefoni; ijwi rya DERIC rizayinyuramo."}
+};
+
+let lang = "en", stream = null, facing = "environment", running = false, busy = false, paused = false;
+let models = {}, lastName = "", lastAt = 0, btName = "";
+
+function applyLang(){
+  const t = UI[lang];
+  document.documentElement.lang = lang === "rw" ? "rw" : "en";
+  $("l-en").classList.toggle("on", lang === "en");
+  $("l-rw").classList.toggle("on", lang === "rw");
+  $("g-text").textContent = t.gate; $("go").textContent = t.go;
+  $("g-chrome").textContent = t.chrome; $("g-copy").textContent = t.copy;
+  $("flip").textContent = t.flip; $("test").textContent = t.test;
+  $("setb").textContent = t.set; $("fbb").textContent = t.fb; $("torch").textContent = t.torchBtn;
+  $("s-t").textContent = t.set; $("s-sp").textContent = t.speed; $("s-au").textContent = t.autoCam; $("s-done").textContent = t.done;
+  $("f-t").textContent = t.fbT; $("f-m").placeholder = t.fbPh; $("f-n").textContent = t.fbN; $("f-send").textContent = t.send; $("f-copy").textContent = t.copyMail; $("f-cancel").textContent = t.cancel;
+  $("pause").textContent = paused ? t.resume : t.pause;
+  $("bt").textContent = btName ? t.btOn + btName : t.bt;
+  if (!running) return;
+  $("meta").textContent = "";
+}
+$("l-en").onclick = () => { lang = "en"; applyLang(); lastName = ""; };
+$("l-rw").onclick = () => { lang = "rw"; applyLang(); lastName = ""; };
+
+/* ---------- speech ---------- */
+let speakUntil = 0, speakTok = 0;
+function voiceFor(l){
+  const vs = speechSynthesis.getVoices(), f = c => vs.find(v => v.lang.toLowerCase().replace("_","-").startsWith(c));
+  return l === "rw" ? (f("rw") || f("sw")) : f("en");
+}
+function speak(items, l){                       // one string, or a list spoken one by one
+  if (!("speechSynthesis" in window)) return;
+  const list = [].concat(items).filter(Boolean); if (!list.length) return;
+  speechSynthesis.cancel(); const tok = ++speakTok; let ms = 0;
+  list.forEach((text, i) => {
+    const u = new SpeechSynthesisUtterance(text), v = voiceFor(l);
+    if (v){ u.voice = v; u.lang = v.lang; } else u.lang = l === "rw" ? "rw-RW" : "en-US";
+    u.rate = .95;
+    if (i === list.length - 1) u.onend = u.onerror = () => { if (tok === speakTok) speakUntil = 0; };
+    speechSynthesis.speak(u); ms += Math.max(1200, text.length * 110);
+  });
+  speakUntil = Date.now() + Math.min(ms, 20000);
+}
+speechSynthesis && (speechSynthesis.onvoiceschanged = () => {});
+
+/* ---------- camera ---------- */
+async function getStream(){
+  const tries = [{video:{facingMode:{ideal:facing}, width:{ideal:1280}}, audio:false}, {video:{facingMode:{ideal:facing}}, audio:false}, {video:true, audio:false}];
+  let last;
+  for (const c of tries){
+    try { return await navigator.mediaDevices.getUserMedia(c); }
+    catch(e){ last = e; if (e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "NotFoundError")) throw e; }
+  }
+  throw last;
+}
+async function startCamera(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const st = await getStream();
+  if (stream && stream !== st) stream.getTracks().forEach(t => t.stop());
+  stream = st;
+  $("v").srcObject = stream;
+  stream.getVideoTracks()[0].onended = () => { if (running) setTimeout(() => startCamera().catch(() => {}), 500); };
+  $("v").play().catch(() => {});
+  setTimeout(() => { torchCheck(); autoCam(); }, 800);
+  const t0 = Date.now();                                    // make sure real pictures are arriving
+  while (!$("v").videoWidth && Date.now() - t0 < 6000) await new Promise(r => setTimeout(r, 100));
+  if (!$("v").videoWidth) throw Object.assign(new Error("no picture"), {name:"NotReadableError"});
+}
+let modelsP = null;
+function loadModels(){
+  return modelsP || (modelsP = (async () => {
+    try {
+      await getTF();
+      const [coco, mob] = await Promise.all([cocoSsd.load({base:"mobilenet_v2"}), mobilenet.load({version:2, alpha:1.0})]);
+      models = {coco, mob}; return true;
+    } catch(e){ modelsP = null; $("meta").textContent = String(e.message || e); return false; }
+  })());
+}
+const INAPP = /FBAN|FBAV|FB_IAB|FBIOS|Messenger|Instagram|WhatsApp|TikTok|musical_ly|Snapchat|Line\/|LinkedInApp|Twitter|; wv\)/i.test(navigator.userAgent);
+if (INAPP){
+  $("g-app").classList.remove("hidden");
+  if (!/Android/i.test(navigator.userAgent)) $("g-chrome").classList.add("hidden");
+}
+$("g-chrome").onclick = () => {
+  const u = location;
+  location.href = "intent://" + u.host + u.pathname + u.search + "#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=" + encodeURIComponent(u.href) + ";end";
+};
+$("g-copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(location.href); } catch(e){ window.prompt("Link", location.href); return; }
+  const err = $("g-err"); err.textContent = UI[lang].copied; err.style.color = "var(--mint)"; err.classList.remove("hidden");
+};
+let starting = false;
+async function begin(force){
+  if (running || (starting && force !== true)) return; starting = true;
+  const err = $("g-err");
+  const say = (msg, bad) => { err.textContent = msg; err.style.color = bad ? "var(--warn)" : "var(--mint)"; err.classList.remove("hidden"); };
+  say(INAPP ? UI[lang].inapp : UI[lang].wait, false);
+  if (!navigator.mediaDevices || !window.isSecureContext){ say(INAPP ? UI[lang].inapp : UI[lang].nosec, true); starting = false; return; }
+  try { await startCamera(); }
+  catch(e){
+    const n = e && e.name;
+    say(n === "NotAllowedError" || n === "SecurityError" ? (INAPP ? UI[lang].inapp : UI[lang].denied) : n === "NotFoundError" ? UI[lang].nocam : UI[lang].busyCam, true);
+    starting = false; return;
+  }
+  if (running){ starting = false; return; }
+  err.classList.add("hidden");
+  $("gate").classList.add("hidden");               // camera allowed: open the app
+  $("word").textContent = UI[lang].load;
+  let waited = 0, failed = false;
+  const iv = setInterval(() => { waited++; if (!failed) $("meta").textContent = UI[lang].load + " " + waited + " s"; }, 1000);
+  while (!(await loadModels())){ failed = true; $("meta").textContent = UI[lang].modelErr; await new Promise(r => setTimeout(r, 4000)); failed = false; }
+  clearInterval(iv);
+  $("word").textContent = "—"; $("meta").textContent = UI[lang].none;
+  getOcr().catch(() => {});      // get the text reader ready in the background
+  running = true; starting = false; tick();
+}
+$("go").onclick = () => begin(true);
+
+/* keep the camera alive and ask for access inside the app */
+document.addEventListener("pointerdown", () => { if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }, {once:true});
+if (navigator.permissions && navigator.permissions.query){
+  navigator.permissions.query({name:"camera"}).then(p => {
+    p.onchange = () => { if (p.state === "granted") begin(); };   // starts by itself once allowed, no reload
+  }).catch(() => {});
+}
+setInterval(async () => {
+  if (running || starting || !navigator.permissions || !navigator.permissions.query) return;
+  try { const p = await navigator.permissions.query({name:"camera"}); if (p.state === "granted") begin(); } catch(e){}
+}, 2000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && running && (!stream || stream.getVideoTracks().every(t => t.readyState === "ended"))) startCamera().catch(() => {});
+});
+begin();   // ask for the camera as soon as the app opens
+$("flip").onclick = async () => { facing = facing === "environment" ? "user" : "environment"; try{ await startCamera(); }catch(e){} };
+$("pause").onclick = () => { paused = !paused; applyLang(); };
+
+/* ---------- auto capture + recognition ---------- */
+/* ---------- settings ---------- */
+let S = {gap:1.2, auto:true};
+try { Object.assign(S, JSON.parse(localStorage.getItem("deric-set") || "{}")); } catch(e){}
+const saveS = () => { try { localStorage.setItem("deric-set", JSON.stringify(S)); } catch(e){} };
+const T = () => UI[lang];
+const THR = 0.7;                      // below 70% DERIC says it is not sure
+
+/* ---------- light + auto camera ---------- */
+let lumC = null, torchOn = false, torchPref = null;
+function lum(){
+  const v = $("v"); if (!v.videoWidth) return 128;
+  const c = lumC || (lumC = document.createElement("canvas")); c.width = 16; c.height = 12;
+  const x = c.getContext("2d", {willReadFrequently:true}); x.drawImage(v, 0, 0, 16, 12);
+  const d = x.getImageData(0, 0, 16, 12).data; let t = 0;
+  for (let i = 0; i < d.length; i += 4) t += (d[i] + d[i+1] + d[i+2]) / 3;
+  return t / (d.length / 4);
+}
+const track = () => stream && stream.getVideoTracks()[0];
+function torchCheck(){ const tr = track(), cap = tr && tr.getCapabilities && tr.getCapabilities(); $("torch").classList.toggle("hidden", !(cap && cap.torch)); }
+async function autoCam(){
+  const tr = track(); if (!tr || !tr.getCapabilities || !running) return;
+  const L = lum(), cap = tr.getCapabilities(), adv = {};
+  if (S.auto){
+    ["focusMode","exposureMode","whiteBalanceMode"].forEach(k => { if (cap[k] && cap[k].includes("continuous")) adv[k] = "continuous"; });
+    if (cap.exposureCompensation){ const e = cap.exposureCompensation; adv.exposureCompensation = L < 70 ? Math.min(e.max, 1.5) : L > 190 ? Math.max(e.min, -1) : 0; }
+    if (cap.torch && torchPref === null && L < 35) torchOn = true;
+  }
+  if (cap.torch) adv.torch = torchOn;
+  $("torch").classList.toggle("ok", torchOn);
+  try { if (Object.keys(adv).length) await tr.applyConstraints({advanced:[adv]}); } catch(e){}
+  const t = T(); $("env").textContent = S.auto ? (L < 70 ? t.lDark : L > 190 ? t.lBright : t.lOk) + (torchOn ? " · " + t.lTorch : "") : "";
+}
+setInterval(autoCam, 2500);
+$("torch").onclick = () => { torchPref = torchOn = !torchOn; autoCam(); };
+function envFilter(){ if (!S.auto) return "none"; const L = lum(); return L < 70 ? "brightness(1.5) contrast(1.1)" : L > 200 ? "brightness(.85)" : "none"; }
+
+/* ---------- objects: name each one, "not sure" under 70% ---------- */
+async function analyseObjects(){
+  const v = $("v"), c = $("cv"), w = 416;
+  c.width = w; c.height = Math.round(w * v.videoHeight / v.videoWidth) || 312;
+  const x = c.getContext("2d"); x.filter = envFilter(); x.drawImage(v, 0, 0, c.width, c.height); x.filter = "none";
+  const d = await models.coco.detect(c, 10, 0.4);
+  d.sort((a, b) => b.bbox[2] * b.bbox[3] - a.bbox[2] * a.bbox[3]);       // biggest first
+  const known = new Map(); let unsure = 0;
+  d.forEach(o => { if (o.score >= THR){ const k = known.get(o.class); known.set(o.class, {score:Math.max(k ? k.score : 0, o.score), n:(k ? k.n : 0) + 1}); } else unsure++; });
+  if (!known.size){                                                       // second opinion on the whole picture
+    const m = await models.mob.classify(c, 1);
+    if (m.length && m[0].probability >= THR) known.set(m[0].className.split(",")[0].trim().toLowerCase(), {score:m[0].probability, n:1});
+    else if (!unsure && m.length && m[0].probability >= 0.35) unsure = 1;
+  }
+  return {known, unsure};
+}
+const seen = new Map(), streak = new Map();     // seen: already spoken (name -> captures missed)
+let lastText = "", textMiss = 0;
+function resetMemory(){ seen.clear(); streak.clear(); lastText = ""; textMiss = 0; }
+function handleObjects(r){
+  const t = T(), names = [...r.known.keys()], nameOf = k => lang === "rw" ? (RW[k] || k) : k;
+  const shown = names.map(nameOf); if (r.unsure) shown.push(t.notSure);
+  $("word").textContent = shown.length ? shown.join(" · ") : "—";
+  const now = new Set(names); if (r.unsure) now.add("?");
+  const say = [];
+  now.forEach(k => {
+    streak.set(k, (streak.get(k) || 0) + 1);
+    const sc = k === "?" ? 0 : r.known.get(k).score;
+    if (!seen.has(k) && (streak.get(k) >= 2 || sc >= 0.85)) say.push(k);   // new things only, never repeat
+    if (seen.has(k) || say.includes(k)) seen.set(k, 0);
+  });
+  [...streak.keys()].forEach(k => { if (!now.has(k)) streak.delete(k); });
+  [...seen.keys()].forEach(k => { if (!now.has(k)){ const m = seen.get(k) + 1; if (m >= 3) seen.delete(k); else seen.set(k, m); } });
+  return {n:shown.length, say:say.map(k => k === "?" ? t.notSure : t.say(nameOf(k)))};
+}
+
+/* ---------- text: scan and read writing ---------- */
+let ocr = null, ocrP = null;
+function getOcr(){
+  return ocrP || (ocrP = getOcrLib().then(() => Tesseract.createWorker("eng")).then(w => (ocr = w)).catch(e => { ocrP = null; throw e; }));
+}
+async function analyseText(){
+  const v = $("v"), c = document.createElement("canvas"), W = 960;
+  c.width = W; c.height = Math.round(W * v.videoHeight / v.videoWidth) || 720;
+  const x = c.getContext("2d"); x.filter = (lum() < 70 && S.auto ? "brightness(1.5) " : "") + "grayscale(1) contrast(1.5)";
+  x.drawImage(v, 0, 0, c.width, c.height); x.filter = "none";
+  const {data} = await ocr.recognize(c);
+  const words = data.words ? data.words.filter(a => a.confidence >= 60 && /[\p{L}\p{N}]/u.test(a.text)).map(a => a.text) : [data.confidence >= 60 ? data.text : ""];
+  const text = words.join(" ").replace(/\s+/g, " ").trim();
+  return text.length >= 4 && /\p{L}{3}/u.test(text) ? text : "";
+}
+function sameText(a, b){
+  if (!b) return false;
+  const A = new Set(a.toLowerCase().split(" ")), B = new Set(b.toLowerCase().split(" ")); let i = 0;
+  A.forEach(w => { if (B.has(w)) i++; });
+  return i / Math.max(A.size, B.size) >= 0.6;
+}
+function handleText(text){
+  if (!text){ if (++textMiss >= 3) lastText = ""; $("txt").textContent = ""; return {has:false, say:[]}; }
+  textMiss = 0; $("txt").textContent = text.slice(0, 300);
+  if (!sameText(text, lastText)){ lastText = text; return {has:true, say:[T().reads + text.slice(0, 400)]}; }   // same writing is read once
+  return {has:true, say:[]};
+}
+let tC = null;
+function textiness(){          // quick check: does the picture look like it has writing? (decides whether to run the text reader)
+  const v = $("v"); if (!v.videoWidth) return 0;
+  const c = tC || (tC = document.createElement("canvas")), w = 200, h = Math.round(w * v.videoHeight / v.videoWidth) || 150;
+  c.width = w; c.height = h;
+  const x = c.getContext("2d", {willReadFrequently:true}); x.drawImage(v, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data; let e = 0, n = 0;
+  for (let y = 0; y < h; y += 2) for (let i = 1; i < w; i++){
+    const a = (y * w + i) * 4, b = a - 4;
+    if (Math.abs((d[a] * .3 + d[a+1] * .59 + d[a+2] * .11) - (d[b] * .3 + d[b+1] * .59 + d[b+2] * .11)) > 35) e++;
+    n++;
+  }
+  return e / n;
+}
+
+/* ---------- auto capture loop: objects and writing, detected automatically ---------- */
+let loopId = 0, lastTick = 0;
+const withLimit = p => Promise.race([p, new Promise((_, j) => setTimeout(() => j("timeout"), LIMIT))]);
+async function tick(){
+  const id = ++loopId; lastTick = Date.now();
+  try {
+    if (running && !paused && $("v").videoWidth && Date.now() > speakUntil){
+      if ($("v").paused) $("v").play().catch(() => {});
+      if (!ocr && !ocrP) getOcr().catch(() => {});
+      $("stage").classList.add("busy");
+      const t0 = performance.now(); $("meta").className = "";
+      const wantText = !!ocr && textiness() >= 0.05;
+      const [o, x] = await Promise.allSettled([withLimit(analyseObjects()), wantText ? withLimit(analyseText()) : Promise.resolve("")]);
+      const sec = ((performance.now() - t0) / 1000).toFixed(1), t = T();
+      if (o.status === "rejected" && x.status === "rejected"){ $("meta").className = "slow"; $("meta").innerHTML = "<b>" + t.slow + "</b>"; }
+      else {
+        const ob = o.status === "fulfilled" ? handleObjects(o.value) : {n:0, say:[]};
+        const tx = handleText(x.status === "fulfilled" ? x.value : "");
+        if (ob.say.length || tx.say.length) speak([...ob.say, ...tx.say], lang);
+        $("meta").innerHTML = (ob.n || tx.has ? "" : t.none + " · ") + "<b>" + sec + t.sec + "</b>";
+        if (!ob.n && !tx.has) $("word").textContent = "—";
+      }
+    }
+  } catch(e){}
+  $("stage").classList.remove("busy");
+  if (id === loopId) setTimeout(tick, Math.round(S.gap * 1000));
+}
+setInterval(() => {   // watchdog: restart the loop if it ever stalls
+  if (running && Date.now() - lastTick > 20000){ speakUntil = 0; try { speechSynthesis.cancel(); } catch(e){} tick(); }
+}, 4000);
+
+/* ---------- controls ---------- */
+function showGap(){ $("s-v").textContent = S.gap.toFixed(1) + " s"; }
+$("setb").onclick = () => { $("s-r").value = S.gap; $("s-a").checked = S.auto; showGap(); $("set").classList.remove("hidden"); };
+$("s-r").oninput = () => { S.gap = +$("s-r").value; showGap(); saveS(); };
+$("s-a").onchange = () => { S.auto = $("s-a").checked; saveS(); autoCam(); };
+$("s-done").onclick = () => $("set").classList.add("hidden");
+const MAIL = "support.kglai@gmail.com";
+$("fbb").onclick = () => $("fb").classList.remove("hidden");
+$("f-cancel").onclick = () => $("fb").classList.add("hidden");
+$("f-send").onclick = () => {
+  const body = ($("f-m").value.trim() || "") + "\n\n---\nDERIC | " + lang + " | " + navigator.userAgent;
+  location.href = "mailto:" + MAIL + "?subject=" + encodeURIComponent("DERIC feedback") + "&body=" + encodeURIComponent(body);
+};
+$("f-copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(MAIL); $("f-n").textContent = T().mailCopied; } catch(e){ window.prompt("Email", MAIL); }
+};
+
+/* ---------- bluetooth ---------- */
+$("bt").onclick = async () => {
+  if (!navigator.bluetooth){ $("meta").textContent = UI[lang].unsup; return; }
+  try {
+    const d = await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+    btName = d.name || "device"; $("bt").classList.add("ok"); applyLang();
+    d.addEventListener("gattserverdisconnected", () => { btName = ""; $("bt").classList.remove("ok"); applyLang(); });
+    try { await d.gatt.connect(); } catch(e){}
+    speak(lang === "rw" ? "Bluetooth yahujwe" : "Bluetooth connected", lang);
+  } catch(e){ /* cancelled */ }
+};
+$("test").onclick = () => speak(lang === "rw" ? "Ni DERIC" : "This is DERIC", lang);
+
+applyLang();
+</script>
+</body>
+</html>
